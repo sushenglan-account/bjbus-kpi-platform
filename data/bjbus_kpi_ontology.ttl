@@ -1,0 +1,1073 @@
+@prefix :       <http://transit.beijing.cn/bjbus-kpi#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+
+# =============================================================================
+# 北京公交 KPI 看板业务本体（经营看板 + 安服看板）
+# 覆盖 50 个概念，6 个业务域：O/MD/S/D/SC/P
+# 版本：2026-06-10
+# =============================================================================
+
+<http://transit.beijing.cn/bjbus-kpi> a owl:Ontology ;
+    rdfs:label "北京公交KPI看板本体"@zh ;
+    rdfs:comment "覆盖经营看板与安服看板全量概念，6大业务域50个BusinessConcept"@zh ;
+    owl:versionInfo "1.0.0" .
+
+# ── 数据属性声明 ─────────────────────────────────────────────
+:primaryTable a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "主查询表（物理全名，含库名）"@zh .
+:altTables a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "备选/辅助表（逗号分隔）"@zh .
+:triggerKeywords a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "意图识别触发关键词（逗号分隔）"@zh .
+:keyMetrics a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "核心度量字段（JSON格式）"@zh .
+:queryTemplate a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "SQL查询模板（JSON格式）"@zh .
+:partitionField a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "分区字段"@zh .
+:timeField a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "毫秒时间戳字段"@zh .
+:businessRule a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "治理规则"@zh .
+:domain a owl:DatatypeProperty ;
+    rdfs:domain :BusinessConcept ; rdfs:range xsd:string ;
+    rdfs:comment "所属业务域"@zh .
+
+# ── Class 层次 ────────────────────────────────────────────────
+:BusinessConcept a owl:Class ; rdfs:label "业务概念"@zh .
+:Entity a owl:Class ; rdfs:subClassOf :BusinessConcept .
+:Event  a owl:Class ; rdfs:subClassOf :BusinessConcept .
+:Report a owl:Class ; rdfs:subClassOf :BusinessConcept .
+
+# =============================================================================
+# Domain O：运营核心
+# =============================================================================
+
+:O-01 a :Report ;
+    rdfs:label "路单发车班次"@zh ;
+    rdfs:comment "路单/发车/班次/趟次/空放/运行公里/出车"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_BS_LD_DAY_MI" ;
+    :triggerKeywords "路单,发车,班次,趟次,空放,运行公里,出车,行车" ;
+    :keyMetrics """{"FCSJ":"发车时间","BCCS":"班次数","KFLC":"空放里程","YYLC":"运行公里","CCCS":"出车次数"}""" ;
+    :queryTemplate """{
+  "o01_daily": "SELECT XLH, SUM(BCCS) AS BCCS, SUM(YYLC) AS YYLC, SUM(CCCS) AS CCCS FROM PROD_DW.TA_BS_LD_DAY_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY BCCS DESC",
+  "o01_yesterday": "SELECT XLH, SUM(BCCS) AS BCCS, SUM(YYLC) AS YYLC FROM PROD_DW.TA_BS_LD_DAY_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY) GROUP BY XLH",
+  "o01_by_line": "SELECT RQ, XLH, BCCS, YYLC, CCCS FROM PROD_DW.TA_BS_LD_DAY_MI WHERE RQ='{date}' AND XLH='{line}'",
+  "o01_ranking": "SELECT XLH, SUM(BCCS) AS BCCS FROM PROD_DW.TA_BS_LD_DAY_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY BCCS DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-01→o01_daily]: 按线路汇总当日班次和运行公里" .
+
+:O-02 a :Report ;
+    rdfs:label "出车率配班率运力分析"@zh ;
+    rdfs:comment "出车率/配班率/车次/运力分析"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_YLFX_LINE_DAY_MI" ;
+    :triggerKeywords "出车率,配班率,运力分析,运力,车次完成" ;
+    :keyMetrics """{"CCLS":"出车辆数","PBLS":"配班辆数","CCL":"出车率","PBL":"配班率","WCCC":"完成车次"}""" ;
+    :queryTemplate """{
+  "o02_daily": "SELECT XLH, CCLS, PBLS, CCL, PBL, WCCC FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_DAY_MI WHERE RQ=CURDATE()",
+  "o02_yesterday": "SELECT XLH, CCL, PBL FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_DAY_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)",
+  "o02_by_line": "SELECT RQ, XLH, CCL, PBL, WCCC FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_DAY_MI WHERE RQ='{date}' AND XLH='{line}'",
+  "o02_ranking": "SELECT XLH, CCL FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_DAY_MI WHERE RQ=CURDATE() ORDER BY CCL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-02→o02_daily]: 出车率=出车辆数/配班辆数，配班率=配班辆数/计划辆数" .
+
+:O-03 a :Report ;
+    rdfs:label "客运量刷卡量客流"@zh ;
+    rdfs:comment "客运量/刷卡量/百公里客运量/客流"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_KLFX_LINE_DAY_MI" ;
+    :triggerKeywords "客运量,刷卡量,百公里客运量,客流,乘客,乘车人数" ;
+    :keyMetrics """{"KYL":"客运量","SKL":"刷卡量","BJKLYL":"百公里客运量","KLL":"客流量"}""" ;
+    :queryTemplate """{
+  "o03_daily": "SELECT XLH, SUM(KYL) AS KYL, SUM(SKL) AS SKL, AVG(BJKLYL) AS BJKLYL FROM PROD_DW.TA_YYDD_DD_KLFX_LINE_DAY_MI WHERE RQ=CURDATE() GROUP BY XLH",
+  "o03_yesterday": "SELECT XLH, KYL, SKL FROM PROD_DW.TA_YYDD_DD_KLFX_LINE_DAY_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)",
+  "o03_by_line": "SELECT RQ, XLH, KYL, SKL, BJKLYL FROM PROD_DW.TA_YYDD_DD_KLFX_LINE_DAY_MI WHERE RQ='{date}' AND XLH='{line}'",
+  "o03_ranking": "SELECT XLH, SUM(KYL) AS KYL FROM PROD_DW.TA_YYDD_DD_KLFX_LINE_DAY_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY KYL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-03→o03_daily]: 客运量含刷卡与现金，百公里客运量=客运量/运行公里*100" .
+
+:O-04 a :Report ;
+    rdfs:label "历史客运量近14日趋势"@zh ;
+    rdfs:comment "历史客运量/近14日客运量/历史客流趋势"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_CA_CLEAN_LINE_DI" ;
+    :triggerKeywords "历史客运量,近14日,客流趋势,历史趋势,同比客流" ;
+    :keyMetrics """{"KYL":"客运量","RQ":"日期","XLH":"线路号","TBZJE":"同比增减额"}""" ;
+    :queryTemplate """{
+  "o04_near14": "SELECT RQ, XLH, KYL FROM PROD_DW.TA_CA_CLEAN_LINE_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND RQ<CURDATE() ORDER BY RQ DESC",
+  "o04_range": "SELECT RQ, XLH, KYL FROM PROD_DW.TA_CA_CLEAN_LINE_DI WHERE RQ>='{date_start}' AND RQ<='{date_end}' ORDER BY RQ",
+  "o04_by_line": "SELECT RQ, KYL FROM PROD_DW.TA_CA_CLEAN_LINE_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND XLH='{line}' ORDER BY RQ"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-04→o04_near14]: 取近14日历史数据用于趋势分析" .
+
+:O-05 a :Report ;
+    rdfs:label "计划车次计划配班率"@zh ;
+    rdfs:comment "计划车次/计划配班率/兑现率分母"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_PLAN_LINE_DAY_DI" ;
+    :triggerKeywords "计划车次,计划配班率,兑现率,计划完成率" ;
+    :keyMetrics """{"JHHC":"计划行程","JHCC":"计划车次","JHPBL":"计划配班率"}""" ;
+    :queryTemplate """{
+  "o05_daily": "SELECT XLH, JHCC, JHPBL FROM PROD_DW.TA_YYDD_DD_PLAN_LINE_DAY_DI WHERE RQ=CURDATE()",
+  "o05_yesterday": "SELECT XLH, JHCC, JHPBL FROM PROD_DW.TA_YYDD_DD_PLAN_LINE_DAY_DI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)",
+  "o05_by_line": "SELECT RQ, XLH, JHCC, JHPBL FROM PROD_DW.TA_YYDD_DD_PLAN_LINE_DAY_DI WHERE RQ='{date}' AND XLH='{line}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-05→o05_daily]: 计划车次为兑现率考核分母，需与实际完成车次对比" .
+
+:O-06 a :Report ;
+    rdfs:label "准点率瞬时速度晚点"@zh ;
+    rdfs:comment "准点率/瞬时速度/间隔/晚点"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_ZDFX_LINE_MI" ;
+    :triggerKeywords "准点率,晚点,瞬时速度,间隔,不准点,准点" ;
+    :keyMetrics """{"ZDL":"准点率","WDS":"晚点次数","SSJD":"瞬时速度","JG":"间隔时间"}""" ;
+    :queryTemplate """{
+  "o06_daily": "SELECT XLH, AVG(ZDL) AS ZDL, SUM(WDS) AS WDS FROM PROD_DW.TA_YYDD_DD_ZDFX_LINE_MI WHERE RQ=CURDATE() GROUP BY XLH",
+  "o06_yesterday": "SELECT XLH, ZDL, WDS FROM PROD_DW.TA_YYDD_DD_ZDFX_LINE_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)",
+  "o06_by_line": "SELECT RQ, XLH, ZDL, WDS, SSJD, JG FROM PROD_DW.TA_YYDD_DD_ZDFX_LINE_MI WHERE RQ='{date}' AND XLH='{line}'",
+  "o06_ranking": "SELECT XLH, AVG(ZDL) AS ZDL FROM PROD_DW.TA_YYDD_DD_ZDFX_LINE_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY ZDL ASC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-06→o06_daily]: 准点率=准点趟次/总趟次，晚点超5分钟计入" .
+
+:O-07 a :Report ;
+    rdfs:label "时组运力分时段出车"@zh ;
+    rdfs:comment "时组运力/分时段出车"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_YLFX_LINE_SZ_MI" ;
+    :triggerKeywords "时组运力,分时段,时段出车,高峰时段运力" ;
+    :keyMetrics """{"SZ":"时组","CCLS":"出车辆数","YLL":"运力量"}""" ;
+    :queryTemplate """{
+  "o07_daily": "SELECT XLH, SZ, CCLS, YLL FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_SZ_MI WHERE RQ=CURDATE() ORDER BY SZ",
+  "o07_by_hour": "SELECT XLH, SZ, CCLS FROM PROD_DW.TA_YYDD_DD_YLFX_LINE_SZ_MI WHERE RQ='{date}' AND XLH='{line}' ORDER BY SZ"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-07→o07_daily]: 按时组(小时)展示运力分布" .
+
+:O-08 a :Report ;
+    rdfs:label "区域客流五峰客流"@zh ;
+    rdfs:comment "区域客流/五峰客流/分公司客运量"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_STAT.TA_YYDD_KLFX_QY_WF_SZ_MI" ;
+    :triggerKeywords "区域客流,五峰客流,分公司客运量,区域客运,五峰时段" ;
+    :keyMetrics """{"QY":"区域","WF":"五峰时段","KYL":"客运量","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "o08_daily": "SELECT QY, WF, SUM(KYL) AS KYL FROM PROD_STAT.TA_YYDD_KLFX_QY_WF_SZ_MI WHERE RQ=CURDATE() GROUP BY QY, WF",
+  "o08_by_org": "SELECT FGS, SUM(KYL) AS KYL FROM PROD_STAT.TA_YYDD_KLFX_QY_WF_SZ_MI WHERE RQ=CURDATE() GROUP BY FGS ORDER BY KYL DESC",
+  "o08_yesterday": "SELECT QY, WF, KYL FROM PROD_STAT.TA_YYDD_KLFX_QY_WF_SZ_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-08→o08_daily]: 五峰=五个高峰时段，按区域和分公司维度汇总" .
+
+:O-09 a :Report ;
+    rdfs:label "站点客流五峰站点"@zh ;
+    rdfs:comment "站点客流/五峰站点"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZD_MI" ;
+    :triggerKeywords "站点客流,五峰站点,站点乘客,站点上下车" ;
+    :keyMetrics """{"ZD":"站点","WF":"五峰","SCKYL":"上车客运量","XCKYL":"下车客运量"}""" ;
+    :queryTemplate """{
+  "o09_daily": "SELECT ZD, WF, SCKYL, XCKYL FROM PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZD_MI WHERE RQ=CURDATE() AND XLH='{line}' ORDER BY SCKYL DESC",
+  "o09_top_station": "SELECT ZD, SUM(SCKYL) AS SCKYL FROM PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZD_MI WHERE RQ=CURDATE() GROUP BY ZD ORDER BY SCKYL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-09→o09_daily]: 站点客流须指定线路，按五峰时段分组" .
+
+:O-10 a :Report ;
+    rdfs:label "区域运力五峰运力"@zh ;
+    rdfs:comment "区域运力/五峰运力"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_YLFX_QY_WF_MI" ;
+    :triggerKeywords "区域运力,五峰运力,分区域出车,高峰运力" ;
+    :keyMetrics """{"QY":"区域","WF":"五峰时段","CCLS":"出车辆数","YLL":"运力"}""" ;
+    :queryTemplate """{
+  "o10_daily": "SELECT QY, WF, CCLS, YLL FROM PROD_DW.TA_YYDD_DD_YLFX_QY_WF_MI WHERE RQ=CURDATE() ORDER BY QY, WF",
+  "o10_yesterday": "SELECT QY, WF, YLL FROM PROD_DW.TA_YYDD_DD_YLFX_QY_WF_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-10→o10_daily]: 按区域和五峰时段分析运力投放" .
+
+:O-11 a :Report ;
+    rdfs:label "区域里程五峰里程"@zh ;
+    rdfs:comment "区域里程/五峰里程"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_LCFX_QY_WF_MI" ;
+    :triggerKeywords "区域里程,五峰里程,运行里程分析,里程分布" ;
+    :keyMetrics """{"QY":"区域","WF":"五峰","YYLC":"运行里程","KFLC":"空放里程"}""" ;
+    :queryTemplate """{
+  "o11_daily": "SELECT QY, WF, SUM(YYLC) AS YYLC, SUM(KFLC) AS KFLC FROM PROD_DW.TA_YYDD_DD_LCFX_QY_WF_MI WHERE RQ=CURDATE() GROUP BY QY, WF",
+  "o11_yesterday": "SELECT QY, SUM(YYLC) AS YYLC FROM PROD_DW.TA_YYDD_DD_LCFX_QY_WF_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY) GROUP BY QY"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-11→o11_daily]: 里程分析含运营里程和空放里程" .
+
+:O-12 a :Report ;
+    rdfs:label "断面客流分析"@zh ;
+    rdfs:comment "断面客流/断面分析"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_STAT.TA_YYDD_DD_DMFX_QY_WF_MI" ;
+    :triggerKeywords "断面客流,断面分析,断面满载,断面流量" ;
+    :keyMetrics """{"DMMZ":"断面满载率","DMKLL":"断面客流量","ZD":"站点"}""" ;
+    :queryTemplate """{
+  "o12_daily": "SELECT ZD, DMMZ, DMKLL FROM PROD_STAT.TA_YYDD_DD_DMFX_QY_WF_MI WHERE RQ=CURDATE() ORDER BY DMMZ DESC",
+  "o12_by_line": "SELECT ZD, DMMZ, DMKLL FROM PROD_STAT.TA_YYDD_DD_DMFX_QY_WF_MI WHERE RQ='{date}' AND XLH='{line}' ORDER BY ZD"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-12→o12_daily]: 断面分析展示各站间客流拥挤程度" .
+
+:O-13 a :Report ;
+    rdfs:label "五峰间隔区域间隔"@zh ;
+    rdfs:comment "五峰间隔/区域间隔"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_JG_QY_WF_SZ_MI" ;
+    :triggerKeywords "五峰间隔,区域间隔,发车间隔,高峰间距" ;
+    :keyMetrics """{"JG":"间隔分钟","QY":"区域","WF":"五峰时段"}""" ;
+    :queryTemplate """{
+  "o13_daily": "SELECT QY, WF, AVG(JG) AS JG FROM PROD_DW.TA_YYDD_DD_JG_QY_WF_SZ_MI WHERE RQ=CURDATE() GROUP BY QY, WF",
+  "o13_by_line": "SELECT XLH, WF, JG FROM PROD_DW.TA_YYDD_DD_JG_QY_WF_SZ_MI WHERE RQ='{date}' AND XLH='{line}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-13→o13_daily]: 间隔时间越短服务水平越高" .
+
+:O-14 a :Report ;
+    rdfs:label "运营质量近6月"@zh ;
+    rdfs:comment "运营质量/近6月运营质量"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_XLYYZL_QY_DAY_DI" ;
+    :triggerKeywords "运营质量,近6月质量,综合质量,服务质量" ;
+    :keyMetrics """{"YYZL":"运营质量指数","ZZDF":"综合得分"}""" ;
+    :queryTemplate """{
+  "o14_near6m": "SELECT RQ, XLH, YYZL, ZZDF FROM PROD_DW.TA_YYDD_DD_XLYYZL_QY_DAY_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 180 DAY) ORDER BY RQ DESC",
+  "o14_ranking": "SELECT XLH, AVG(YYZL) AS YYZL FROM PROD_DW.TA_YYDD_DD_XLYYZL_QY_DAY_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY XLH ORDER BY YYZL ASC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-14→o14_near6m]: 近6月运营质量趋势，质量低的线路优先关注" .
+
+:O-15 a :Report ;
+    rdfs:label "车辆状态当前状态"@zh ;
+    rdfs:comment "车辆状态/当前车辆状态"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_SJC_CLZT_BUS_LATEST_MI_VIEW" ;
+    :triggerKeywords "车辆状态,当前状态,车辆在线,实时车辆,GPS状态" ;
+    :keyMetrics """{"CLZBH":"车辆自编号","ZT":"状态","SSJD":"瞬时速度","GPS_TIME":"GPS时间"}""" ;
+    :queryTemplate """{
+  "o15_realtime": "SELECT CLZBH, ZT, SSJD, GPS_TIME FROM PROD_DW.TA_SJC_CLZT_BUS_LATEST_MI_VIEW WHERE ZT='运营' LIMIT 100",
+  "o15_by_vehicle": "SELECT CLZBH, ZT, SSJD, GPS_TIME FROM PROD_DW.TA_SJC_CLZT_BUS_LATEST_MI_VIEW WHERE CLZBH='{zbh}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-15→o15_realtime]: 实时视图无日期分区，直接查最新状态" .
+
+:O-16 a :Report ;
+    rdfs:label "备车率备车配置"@zh ;
+    rdfs:comment "备车率/备车配置率"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_BCLFX_FGS_GJY_DI" ;
+    :triggerKeywords "备车率,备车,备用车辆,备车配置" ;
+    :keyMetrics """{"BCL":"备车率","BCLS":"备车辆数","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "o16_daily": "SELECT FGS, BCL, BCLS FROM PROD_DW.TA_YYDD_DD_BCLFX_FGS_GJY_DI WHERE RQ=CURDATE()",
+  "o16_yesterday": "SELECT FGS, BCL FROM PROD_DW.TA_YYDD_DD_BCLFX_FGS_GJY_DI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-16→o16_daily]: 备车率=备用车辆/在册车辆" .
+
+:O-17 a :Report ;
+    rdfs:label "座位占用满座率"@zh ;
+    rdfs:comment "座位占用/满座率"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZW_MI" ;
+    :triggerKeywords "座位占用,满座率,满员,超员,载客率" ;
+    :keyMetrics """{"MZL":"满座率","ZYL":"座位占用率","WF":"五峰时段"}""" ;
+    :queryTemplate """{
+  "o17_daily": "SELECT XLH, WF, AVG(MZL) AS MZL FROM PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZW_MI WHERE RQ=CURDATE() GROUP BY XLH, WF",
+  "o17_ranking": "SELECT XLH, AVG(MZL) AS MZL FROM PROD_STAT.TA_YYDD_KLFX_LINE_WF_SZ_ZW_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY MZL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-17→o17_daily]: 满座率超100%表示超员" .
+
+:O-18 a :Report ;
+    rdfs:label "站点历史客流"@zh ;
+    rdfs:comment "站点历史客流"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_STAT.TA_YYDD_KLFX_LINE_ZD_DAY_MI" ;
+    :triggerKeywords "站点历史客流,站点日客流,历史站点,站点趋势" ;
+    :keyMetrics """{"ZD":"站点","KYL":"客运量","RQ":"日期"}""" ;
+    :queryTemplate """{
+  "o18_near14": "SELECT ZD, RQ, KYL FROM PROD_STAT.TA_YYDD_KLFX_LINE_ZD_DAY_MI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND XLH='{line}' ORDER BY RQ DESC",
+  "o18_by_station": "SELECT RQ, KYL FROM PROD_STAT.TA_YYDD_KLFX_LINE_ZD_DAY_MI WHERE RQ='{date}' AND ZD='{station}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-18→o18_near14]: 站点历史客流需指定线路编号" .
+
+:O-19 a :Report ;
+    rdfs:label "复工情况运营总数"@zh ;
+    rdfs:comment "复工情况/运营总数"@zh ;
+    :domain "运营核心" ;
+    :primaryTable "PROD_DW.TA_EPIDEMIC_STATISTICS_JT_DI" ;
+    :triggerKeywords "复工情况,运营总数,复工,疫情运营,恢复运营" ;
+    :keyMetrics """{"YYZS":"运营总数","FGLS":"复工辆数","FGL":"复工率"}""" ;
+    :queryTemplate """{
+  "o19_daily": "SELECT RQ, YYZS, FGLS, FGL FROM PROD_DW.TA_EPIDEMIC_STATISTICS_JT_DI WHERE RQ=CURDATE()",
+  "o19_trend": "SELECT RQ, YYZS, FGL FROM PROD_DW.TA_EPIDEMIC_STATISTICS_JT_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 7 DAY) ORDER BY RQ"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[O-19→o19_daily]: 复工统计按日更新" .
+
+# =============================================================================
+# Domain MD：主数据
+# =============================================================================
+
+:MD-01 a :Entity ;
+    rdfs:label "车辆主数据"@zh ;
+    rdfs:comment "车辆主数据/车龄/燃料类型"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TD_MD_HX_CL_DA" ;
+    :triggerKeywords "车辆主数据,车龄,燃料类型,车型,新能源车,纯电动" ;
+    :keyMetrics """{"CLZBH":"车辆自编号","CL":"车龄","RLLX":"燃料类型","CPXH":"车辆型号"}""" ;
+    :queryTemplate """{
+  "md01_all": "SELECT CLZBH, CL, RLLX, CPXH FROM PROD_DW.TD_MD_HX_CL_DA WHERE CLZT='在册'",
+  "md01_by_fuel": "SELECT RLLX, COUNT(*) AS CNT FROM PROD_DW.TD_MD_HX_CL_DA WHERE CLZT='在册' GROUP BY RLLX",
+  "md01_by_vehicle": "SELECT CLZBH, CL, RLLX FROM PROD_DW.TD_MD_HX_CL_DA WHERE CLZBH='{zbh}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-01→md01_all]: 车辆主数据为维表，CLZT='在册'过滤有效车辆" .
+
+:MD-02 a :Entity ;
+    rdfs:label "人员主数据"@zh ;
+    rdfs:comment "人员主数据/工号"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TD_MD_HX_RY_NEW_DA" ;
+    :triggerKeywords "人员主数据,工号,员工信息,驾驶员工号,人员档案" ;
+    :keyMetrics """{"GH":"工号","XM":"姓名","FGS":"分公司","RYY":"人员类型"}""" ;
+    :queryTemplate """{
+  "md02_by_gh": "SELECT GH, XM, FGS, RYY FROM PROD_DW.TD_MD_HX_RY_NEW_DA WHERE GH='{gh}'",
+  "md02_by_org": "SELECT GH, XM, RYY FROM PROD_DW.TD_MD_HX_RY_NEW_DA WHERE FGS='{org}' ORDER BY GH"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-02→md02_by_gh]: 人员主数据通过工号精确查询" .
+
+:MD-03 a :Entity ;
+    rdfs:label "运营在册车辆"@zh ;
+    rdfs:comment "运营在册车辆"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TD_SGKB_MD_CL_YYZC_DA" ;
+    :triggerKeywords "运营在册,在册车辆,运营车辆总数,在册数" ;
+    :keyMetrics """{"CLZBH":"车辆自编号","YYZT":"运营状态","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "md03_all": "SELECT FGS, COUNT(*) AS CNT FROM PROD_DW.TD_SGKB_MD_CL_YYZC_DA GROUP BY FGS ORDER BY CNT DESC",
+  "md03_by_org": "SELECT CLZBH, YYZT FROM PROD_DW.TD_SGKB_MD_CL_YYZC_DA WHERE FGS='{org}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-03→md03_all]: 在册车辆为分母，计算出车率等指标" .
+
+:MD-04 a :Entity ;
+    rdfs:label "事故看板驾驶员"@zh ;
+    rdfs:comment "事故看板驾驶员"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TD_SGKB_MD_JSY_DA" ;
+    :triggerKeywords "事故看板驾驶员,事故司机,肇事驾驶员" ;
+    :keyMetrics """{"GH":"工号","XM":"姓名","SGCS":"事故次数","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "md04_all": "SELECT GH, XM, SGCS, FGS FROM PROD_DW.TD_SGKB_MD_JSY_DA ORDER BY SGCS DESC",
+  "md04_ranking": "SELECT GH, XM, SGCS FROM PROD_DW.TD_SGKB_MD_JSY_DA ORDER BY SGCS DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-04→md04_ranking]: 事故次数多的驾驶员需重点关注" .
+
+:MD-05 a :Entity ;
+    rdfs:label "场站信息"@zh ;
+    rdfs:comment "场站信息/场站名称"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TA_MD_CZ_DA" ;
+    :triggerKeywords "场站,停车场,场站信息,场站名称,始发站" ;
+    :keyMetrics """{"CZMC":"场站名称","CZLX":"场站类型","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "md05_all": "SELECT CZMC, CZLX, FGS FROM PROD_DW.TA_MD_CZ_DA ORDER BY FGS",
+  "md05_by_name": "SELECT CZMC, CZLX, FGS FROM PROD_DW.TA_MD_CZ_DA WHERE CZMC LIKE '%{name}%'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-05→md05_all]: 场站主数据为静态维表" .
+
+:MD-06 a :Entity ;
+    rdfs:label "能源站加气站加氢站"@zh ;
+    rdfs:comment "能源站/加气站/加氢站"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TA_MD_NYZ_DA" ;
+    :triggerKeywords "能源站,加气站,加氢站,充电站,加油站,能源补给" ;
+    :keyMetrics """{"NYZMC":"能源站名称","NYLX":"能源类型","WZ":"位置"}""" ;
+    :queryTemplate """{
+  "md06_all": "SELECT NYZMC, NYLX, WZ FROM PROD_DW.TA_MD_NYZ_DA",
+  "md06_by_type": "SELECT NYZMC, WZ FROM PROD_DW.TA_MD_NYZ_DA WHERE NYLX='{type}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-06→md06_by_type]: 能源类型包括CNG/LNG/H2/电等" .
+
+:MD-07 a :Entity ;
+    rdfs:label "线路主数据"@zh ;
+    rdfs:comment "线路主数据/线路编号"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TM_SCZY_MD_XL_DI" ;
+    :triggerKeywords "线路主数据,线路编号,线路信息,线路名称,XLH" ;
+    :keyMetrics """{"XLH":"线路号","XLMC":"线路名称","FGS":"分公司","XLCD":"线路长度"}""" ;
+    :queryTemplate """{
+  "md07_all": "SELECT XLH, XLMC, FGS, XLCD FROM PROD_DW.TM_SCZY_MD_XL_DI ORDER BY XLH",
+  "md07_by_org": "SELECT XLH, XLMC, XLCD FROM PROD_DW.TM_SCZY_MD_XL_DI WHERE FGS='{org}'",
+  "md07_by_line": "SELECT XLH, XLMC, FGS, XLCD FROM PROD_DW.TM_SCZY_MD_XL_DI WHERE XLH='{line}'"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-07→md07_all]: 线路主数据为维表，分公司维度汇总" .
+
+:MD-08 a :Entity ;
+    rdfs:label "人员分布分公司人员"@zh ;
+    rdfs:comment "人员分布/分公司人员"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TM_SCZY_MD_RY_DA" ;
+    :triggerKeywords "人员分布,分公司人员,员工分布,人力配置" ;
+    :keyMetrics """{"FGS":"分公司","RYSL":"人员数量","RYLX":"人员类型"}""" ;
+    :queryTemplate """{
+  "md08_by_org": "SELECT FGS, RYLX, COUNT(*) AS RYSL FROM PROD_DW.TM_SCZY_MD_RY_DA GROUP BY FGS, RYLX ORDER BY FGS",
+  "md08_summary": "SELECT FGS, COUNT(*) AS TOTAL FROM PROD_DW.TM_SCZY_MD_RY_DA GROUP BY FGS ORDER BY TOTAL DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-08→md08_by_org]: 按分公司和人员类型统计人力分布" .
+
+:MD-09 a :Entity ;
+    rdfs:label "在册人员线路人员数"@zh ;
+    rdfs:comment "在册人员/线路人员数"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TA_SCZY_ZCRYTJ_XL_DA" ;
+    :triggerKeywords "在册人员,线路人员,线路司机数,在册驾驶员" ;
+    :keyMetrics """{"XLH":"线路号","JSYSL":"驾驶员数","ZCRYSL":"在册人员数"}""" ;
+    :queryTemplate """{
+  "md09_by_line": "SELECT XLH, JSYSL, ZCRYSL FROM PROD_DW.TA_SCZY_ZCRYTJ_XL_DA ORDER BY XLH",
+  "md09_by_org": "SELECT FGS, SUM(ZCRYSL) AS TOTAL FROM PROD_DW.TA_SCZY_ZCRYTJ_XL_DA GROUP BY FGS"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-09→md09_by_line]: 线路在册人员为人力配置参考" .
+
+:MD-10 a :Report ;
+    rdfs:label "在线车辆在营车辆"@zh ;
+    rdfs:comment "在线车辆/在营车辆"@zh ;
+    :domain "主数据" ;
+    :primaryTable "PROD_DW.TA_BUS_MTONLINE_MI" ;
+    :triggerKeywords "在线车辆,在营车辆,在线数量,当前在营" ;
+    :keyMetrics """{"ZXLS":"在线辆数","ZYLS":"在营辆数","SCSJ":"上传时间"}""" ;
+    :queryTemplate """{
+  "md10_realtime": "SELECT ZXLS, ZYLS, SCSJ FROM PROD_DW.TA_BUS_MTONLINE_MI ORDER BY SCSJ DESC LIMIT 1",
+  "md10_by_org": "SELECT FGS, ZXLS FROM PROD_DW.TA_BUS_MTONLINE_MI WHERE RQ=CURDATE() ORDER BY ZXLS DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[MD-10→md10_realtime]: 实时在线车辆取最新一条记录" .
+
+# =============================================================================
+# Domain S：安全告警
+# =============================================================================
+
+:S-01 a :Event ;
+    rdfs:label "事故实时事故"@zh ;
+    rdfs:comment "事故/实时事故/今日事故"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TI_ANF_SSSG_DAY_MI" ;
+    :triggerKeywords "事故,实时事故,今日事故,交通事故,车辆碰撞,肇事" ;
+    :keyMetrics """{"SGMC":"事故名称","SGLX":"事故类型","SGCS":"事故次数","CLZBH":"车辆自编号"}""" ;
+    :queryTemplate """{
+  "s01_today": "SELECT SGMC, SGLX, CLZBH, SGSJ FROM PROD_DW.TI_ANF_SSSG_DAY_MI WHERE RQ=CURDATE() ORDER BY SGSJ DESC",
+  "s01_yesterday": "SELECT SGLX, COUNT(*) AS CNT FROM PROD_DW.TI_ANF_SSSG_DAY_MI WHERE RQ=DATE_SUB(CURDATE(), INTERVAL 1 DAY) GROUP BY SGLX",
+  "s01_ranking": "SELECT CLZBH, COUNT(*) AS CNT FROM PROD_DW.TI_ANF_SSSG_DAY_MI WHERE RQ=CURDATE() GROUP BY CLZBH ORDER BY CNT DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-01→s01_today]: 今日事故按发生时间倒序排列" .
+
+:S-02 a :Event ;
+    rdfs:label "一键告警紧急告警"@zh ;
+    rdfs:comment "一键告警/紧急告警"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_STAT.TA_ANFU_YYGJ_MI" ;
+    :triggerKeywords "一键告警,紧急告警,紧急按钮,SOS,一键报警" ;
+    :keyMetrics """{"GJLX":"告警类型","CLZBH":"车辆自编号","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "s02_today": "SELECT CLZBH, GJLX, GJSJ FROM PROD_STAT.TA_ANFU_YYGJ_MI WHERE RQ=CURDATE() ORDER BY GJSJ DESC",
+  "s02_realtime": "SELECT CLZBH, GJLX, GJSJ FROM PROD_STAT.TA_ANFU_YYGJ_MI WHERE GJSJ>=DATE_SUB(NOW(), INTERVAL {n_min} MINUTE)"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-02→s02_today]: 一键告警为最高级别安全事件，需即时响应" .
+
+:S-03 a :Event ;
+    rdfs:label "滞站处理"@zh ;
+    rdfs:comment "滞站/滞站处理"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_STAT.TA_ZTYC_ANF_ZZCLCLJG_DAY_MI" ;
+    :triggerKeywords "滞站,滞站处理,停站超时,站点停留" ;
+    :keyMetrics """{"ZZCS":"滞站次数","ZZSJ":"滞站时间","CLJG":"处理结果","ZD":"站点"}""" ;
+    :queryTemplate """{
+  "s03_today": "SELECT CLZBH, ZD, ZZSJ, CLJG FROM PROD_STAT.TA_ZTYC_ANF_ZZCLCLJG_DAY_MI WHERE RQ=CURDATE() ORDER BY ZZSJ DESC",
+  "s03_summary": "SELECT ZD, COUNT(*) AS ZZCS FROM PROD_STAT.TA_ZTYC_ANF_ZZCLCLJG_DAY_MI WHERE RQ=CURDATE() GROUP BY ZD ORDER BY ZZCS DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-03→s03_today]: 滞站超3分钟触发告警" .
+
+:S-04 a :Event ;
+    rdfs:label "ADAS告警车道偏离"@zh ;
+    rdfs:comment "ADAS告警/车道偏离/前碰撞"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_STAT.TF_BT_ADASALARM_EXT_MI" ;
+    :triggerKeywords "ADAS,ADAS告警,车道偏离,前碰撞,FCW,LDW,ADAS预警" ;
+    :keyMetrics """{"ADASLX":"ADAS类型","GJCS":"告警次数","CLZBH":"车辆","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "s04_today": "SELECT CLZBH, ADASLX, GJSJ FROM PROD_STAT.TF_BT_ADASALARM_EXT_MI WHERE RQ=CURDATE() ORDER BY GJSJ DESC",
+  "s04_by_type": "SELECT ADASLX, COUNT(*) AS GJCS FROM PROD_STAT.TF_BT_ADASALARM_EXT_MI WHERE RQ=CURDATE() GROUP BY ADASLX ORDER BY GJCS DESC",
+  "s04_realtime": "SELECT CLZBH, ADASLX, GJSJ FROM PROD_STAT.TF_BT_ADASALARM_EXT_MI WHERE GJSJ>=DATE_SUB(NOW(), INTERVAL {n_min} MINUTE)"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-04→s04_today]: ADAS告警按类型分析，LDW=车道偏离，FCW=前碰撞" .
+
+:S-05 a :Event ;
+    rdfs:label "DMS告警疲劳驾驶"@zh ;
+    rdfs:comment "DMS告警/疲劳驾驶/接打电话"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_AF_JSYYCXW_DAY_MI" ;
+    :triggerKeywords "DMS,DMS告警,疲劳驾驶,接打电话,打哈欠,分神,抽烟" ;
+    :keyMetrics """{"DMSLX":"DMS类型","GJCS":"告警次数","GH":"工号"}""" ;
+    :queryTemplate """{
+  "s05_today": "SELECT GH, DMSLX, GJCS FROM PROD_DW.TF_AF_JSYYCXW_DAY_MI WHERE RQ=CURDATE() ORDER BY GJCS DESC",
+  "s05_by_type": "SELECT DMSLX, COUNT(*) AS TOTAL FROM PROD_DW.TF_AF_JSYYCXW_DAY_MI WHERE RQ=CURDATE() GROUP BY DMSLX ORDER BY TOTAL DESC",
+  "s05_ranking": "SELECT GH, SUM(GJCS) AS TOTAL FROM PROD_DW.TF_AF_JSYYCXW_DAY_MI WHERE RQ=CURDATE() GROUP BY GH ORDER BY TOTAL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-05→s05_today]: DMS覆盖疲劳/电话/吸烟等异常驾驶行为" .
+
+:S-06 a :Event ;
+    rdfs:label "CAN告警违规"@zh ;
+    rdfs:comment "CAN告警/CAN违规"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_WGMX_MI_VIEW" ;
+    :triggerKeywords "CAN告警,CAN违规,车辆总线,急加速,急刹车,急转弯" ;
+    :keyMetrics """{"WGLX":"违规类型","CLZBH":"车辆","WGSJ":"违规时间"}""" ;
+    :queryTemplate """{
+  "s06_today": "SELECT CLZBH, WGLX, WGSJ FROM PROD_DW.TF_ZHAQ_WGMX_MI_VIEW WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s06_by_type": "SELECT WGLX, COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_WGMX_MI_VIEW WHERE RQ=CURDATE() GROUP BY WGLX ORDER BY CNT DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-06→s06_today]: CAN总线违规包括急加速/急刹车/急转弯等" .
+
+:S-07 a :Event ;
+    rdfs:label "进站违规"@zh ;
+    rdfs:comment "进站违规"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_JZWG_MX_MI" ;
+    :triggerKeywords "进站违规,进站超速,进站不规范" ;
+    :keyMetrics """{"CLZBH":"车辆","WGSJ":"违规时间","SD":"速度"}""" ;
+    :queryTemplate """{
+  "s07_today": "SELECT CLZBH, WGSJ, SD FROM PROD_DW.TF_ZHAQ_JZWG_MX_MI WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s07_ranking": "SELECT CLZBH, COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_JZWG_MX_MI WHERE RQ=CURDATE() GROUP BY CLZBH ORDER BY CNT DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-07→s07_today]: 进站违规=进站时车速超规定限速" .
+
+:S-08 a :Event ;
+    rdfs:label "出站违规"@zh ;
+    rdfs:comment "出站违规"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_CZWG_MX_MI" ;
+    :triggerKeywords "出站违规,出站超速,出站不规范" ;
+    :keyMetrics """{"CLZBH":"车辆","WGSJ":"违规时间","SD":"速度"}""" ;
+    :queryTemplate """{
+  "s08_today": "SELECT CLZBH, WGSJ, SD FROM PROD_DW.TF_ZHAQ_CZWG_MX_MI WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s08_ranking": "SELECT CLZBH, COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_CZWG_MX_MI WHERE RQ=CURDATE() GROUP BY CLZBH ORDER BY CNT DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-08→s08_today]: 出站违规=出站时车速超规定限速" .
+
+:S-09 a :Event ;
+    rdfs:label "倒车超速"@zh ;
+    rdfs:comment "倒车超速"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_DCWG_MX_MI" ;
+    :triggerKeywords "倒车超速,倒车违规,倒车速度" ;
+    :keyMetrics """{"CLZBH":"车辆","WGSJ":"违规时间","SD":"速度"}""" ;
+    :queryTemplate """{
+  "s09_today": "SELECT CLZBH, WGSJ, SD FROM PROD_DW.TF_ZHAQ_DCWG_MX_MI WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s09_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_DCWG_MX_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-09→s09_today]: 倒车速度超5km/h触发违规" .
+
+:S-10 a :Event ;
+    rdfs:label "进站不打灯"@zh ;
+    rdfs:comment "进站不打灯"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_JZZXDWG_MX_MI" ;
+    :triggerKeywords "进站不打灯,进站转向灯,进站灯光" ;
+    :keyMetrics """{"CLZBH":"车辆","WGSJ":"违规时间","ZD":"站点"}""" ;
+    :queryTemplate """{
+  "s10_today": "SELECT CLZBH, ZD, WGSJ FROM PROD_DW.TF_ZHAQ_JZZXDWG_MX_MI WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s10_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_JZZXDWG_MX_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-10→s10_today]: 进站未提前100米打转向灯为违规" .
+
+:S-11 a :Event ;
+    rdfs:label "出站不打灯"@zh ;
+    rdfs:comment "出站不打灯"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_CZZXDWG_MX_MI" ;
+    :triggerKeywords "出站不打灯,出站转向灯,出站灯光" ;
+    :keyMetrics """{"CLZBH":"车辆","WGSJ":"违规时间","ZD":"站点"}""" ;
+    :queryTemplate """{
+  "s11_today": "SELECT CLZBH, ZD, WGSJ FROM PROD_DW.TF_ZHAQ_CZZXDWG_MX_MI WHERE RQ=CURDATE() ORDER BY WGSJ DESC",
+  "s11_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_CZZXDWG_MX_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-11→s11_today]: 出站未打转向灯为违规" .
+
+:S-12 a :Event ;
+    rdfs:label "鸣笛不文明"@zh ;
+    rdfs:comment "鸣笛/不文明鸣笛"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_JSGCMDWG_MX_MI" ;
+    :triggerKeywords "鸣笛,不文明鸣笛,违规鸣笛,喇叭" ;
+    :keyMetrics """{"CLZBH":"车辆","MDSJ":"鸣笛时间","MDCS":"鸣笛次数"}""" ;
+    :queryTemplate """{
+  "s12_today": "SELECT CLZBH, MDSJ, MDCS FROM PROD_DW.TF_ZHAQ_JSGCMDWG_MX_MI WHERE RQ=CURDATE() ORDER BY MDSJ DESC",
+  "s12_ranking": "SELECT CLZBH, SUM(MDCS) AS TOTAL FROM PROD_DW.TF_ZHAQ_JSGCMDWG_MX_MI WHERE RQ=CURDATE() GROUP BY CLZBH ORDER BY TOTAL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-12→s12_today]: 鸣笛违规为文明行车考核指标" .
+
+:S-13 a :Event ;
+    rdfs:label "山区超速"@zh ;
+    rdfs:comment "山区超速"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_ZHAQ_SQCS_MX_MI" ;
+    :triggerKeywords "山区超速,山路超速,山区路段违规" ;
+    :keyMetrics """{"CLZBH":"车辆","CSSJ":"超速时间","SD":"速度","XSSD":"限速速度"}""" ;
+    :queryTemplate """{
+  "s13_today": "SELECT CLZBH, CSSJ, SD, XSSD FROM PROD_DW.TF_ZHAQ_SQCS_MX_MI WHERE RQ=CURDATE() ORDER BY SD DESC",
+  "s13_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_ZHAQ_SQCS_MX_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-13→s13_today]: 山区路段限速严格，超速危险程度高" .
+
+:S-14 a :Report ;
+    rdfs:label "ADAS历史汇总"@zh ;
+    rdfs:comment "ADAS历史/历史ADAS汇总"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_STAT.TA_BT_ADASALARM_LINE_SUM_DI" ;
+    :triggerKeywords "ADAS历史,历史ADAS,ADAS汇总,ADAS统计,历史告警趋势" ;
+    :keyMetrics """{"XLH":"线路","GJCS":"告警次数","ADASLX":"类型","RQ":"日期"}""" ;
+    :queryTemplate """{
+  "s14_near30": "SELECT RQ, XLH, GJCS FROM PROD_STAT.TA_BT_ADASALARM_LINE_SUM_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) ORDER BY RQ DESC",
+  "s14_ranking": "SELECT XLH, SUM(GJCS) AS TOTAL FROM PROD_STAT.TA_BT_ADASALARM_LINE_SUM_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY XLH ORDER BY TOTAL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-14→s14_near30]: ADAS历史汇总用于趋势分析和线路风险评估" .
+
+:S-15 a :Report ;
+    rdfs:label "DMS历史告警"@zh ;
+    rdfs:comment "DMS历史告警"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TA_AF_JSYYCXWGW_DAY_DI" ;
+    :triggerKeywords "DMS历史,历史DMS,DMS统计,疲劳历史,驾驶员行为历史" ;
+    :keyMetrics """{"GH":"工号","GJCS":"告警次数","DMSLX":"类型","RQ":"日期"}""" ;
+    :queryTemplate """{
+  "s15_near30": "SELECT GH, DMSLX, SUM(GJCS) AS GJCS FROM PROD_DW.TA_AF_JSYYCXWGW_DAY_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY GH, DMSLX ORDER BY GJCS DESC",
+  "s15_ranking": "SELECT GH, SUM(GJCS) AS TOTAL FROM PROD_DW.TA_AF_JSYYCXWGW_DAY_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY GH ORDER BY TOTAL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-15→s15_near30]: DMS历史用于驾驶员行为长期评估" .
+
+:S-16 a :Report ;
+    rdfs:label "CAN历史违规"@zh ;
+    rdfs:comment "CAN历史告警/历史违规"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TM_ZHAQ_JSY_YYXLCL_TJ_DI" ;
+    :triggerKeywords "CAN历史,历史违规,CAN统计,总线告警历史" ;
+    :keyMetrics """{"GH":"工号","WGCS":"违规次数","WGLX":"违规类型","RQ":"日期"}""" ;
+    :queryTemplate """{
+  "s16_near30": "SELECT GH, WGLX, SUM(WGCS) AS WGCS FROM PROD_DW.TM_ZHAQ_JSY_YYXLCL_TJ_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY GH, WGLX ORDER BY WGCS DESC",
+  "s16_ranking": "SELECT GH, SUM(WGCS) AS TOTAL FROM PROD_DW.TM_ZHAQ_JSY_YYXLCL_TJ_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY GH ORDER BY TOTAL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-16→s16_near30]: CAN历史违规用于月度考核和重点人员识别" .
+
+:S-17 a :Event ;
+    rdfs:label "交通违法违章"@zh ;
+    rdfs:comment "交通违法/违章"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_DW.TF_PS_ANF_AS_ILLEGAL_DA" ;
+    :triggerKeywords "交通违法,违章,闯红灯,违规停车,超速违章" ;
+    :keyMetrics """{"CLZBH":"车辆","WFLX":"违法类型","WFSJ":"违法时间","FKJE":"罚款金额"}""" ;
+    :queryTemplate """{
+  "s17_recent": "SELECT CLZBH, WFLX, WFSJ, FKJE FROM PROD_DW.TF_PS_ANF_AS_ILLEGAL_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) ORDER BY WFSJ DESC",
+  "s17_ranking": "SELECT CLZBH, COUNT(*) AS CNT FROM PROD_DW.TF_PS_ANF_AS_ILLEGAL_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY CLZBH ORDER BY CNT DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-17→s17_recent]: 交通违法含拍照违章和人工开单" .
+
+:S-18 a :Event ;
+    rdfs:label "车辆故障维保"@zh ;
+    rdfs:comment "车辆故障/维保记录"@zh ;
+    :domain "安全告警" ;
+    :primaryTable "PROD_QA.TA_BUSFAULT_ANALYSE_MI" ;
+    :triggerKeywords "车辆故障,故障,维保,故障告警,车辆维修,故障次数" ;
+    :keyMetrics """{"CLZBH":"车辆","GZLX":"故障类型","GZSJ":"故障时间","GZCS":"故障次数"}""" ;
+    :queryTemplate """{
+  "s18_today": "SELECT CLZBH, GZLX, GZSJ FROM PROD_QA.TA_BUSFAULT_ANALYSE_MI WHERE RQ=CURDATE() ORDER BY GZSJ DESC",
+  "s18_ranking": "SELECT CLZBH, COUNT(*) AS GZCS FROM PROD_QA.TA_BUSFAULT_ANALYSE_MI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY CLZBH ORDER BY GZCS DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[S-18→s18_today]: 故障告警需及时处理，高故障率车辆优先维保" .
+
+# =============================================================================
+# Domain D：驾驶员管理
+# =============================================================================
+
+:D-01 a :Report ;
+    rdfs:label "驾驶员管理在岗"@zh ;
+    rdfs:comment "驾驶员管理/驾驶员在岗/重点驾驶员"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_PS_ANF_AS_BJ_DRIVER_MANAGE_MI" ;
+    :triggerKeywords "驾驶员管理,驾驶员在岗,重点驾驶员,重点司机,在岗情况" ;
+    :keyMetrics """{"GH":"工号","ZGT":"在岗状态","ZDLX":"重点类型","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "d01_today": "SELECT GH, ZGT, ZDLX, FGS FROM PROD_DW.TF_PS_ANF_AS_BJ_DRIVER_MANAGE_MI WHERE RQ=CURDATE()",
+  "d01_focus": "SELECT GH, ZDLX FROM PROD_DW.TF_PS_ANF_AS_BJ_DRIVER_MANAGE_MI WHERE RQ=CURDATE() AND ZDLX IS NOT NULL ORDER BY ZDLX"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-01→d01_today]: 重点驾驶员需特别关注其出勤和行为" .
+
+:D-02 a :Event ;
+    rdfs:label "连续运营超时超4小时"@zh ;
+    rdfs:comment "连续运营超时/超4小时"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_LXYYALARM_MI" ;
+    :triggerKeywords "连续运营超时,超4小时,连续驾驶时间,连续运营告警" ;
+    :keyMetrics """{"GH":"工号","LXYYSJ":"连续运营时间","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d02_today": "SELECT GH, LXYYSJ, GJSJ FROM PROD_DW.TF_AQTS_LXYYALARM_MI WHERE RQ=CURDATE() ORDER BY LXYYSJ DESC",
+  "d02_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_LXYYALARM_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-02→d02_today]: 连续运营超4小时需强制休息，防止疲劳驾驶" .
+
+:D-03 a :Event ;
+    rdfs:label "累计运营超时扶轮"@zh ;
+    rdfs:comment "累计运营超时/扶轮超8小时"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_LJYYALARM_MI" ;
+    :triggerKeywords "累计运营超时,扶轮超8小时,累计驾驶,日累计" ;
+    :keyMetrics """{"GH":"工号","LJYYSJ":"累计运营时间","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d03_today": "SELECT GH, LJYYSJ, GJSJ FROM PROD_DW.TF_AQTS_LJYYALARM_MI WHERE RQ=CURDATE() ORDER BY LJYYSJ DESC",
+  "d03_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_LJYYALARM_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-03→d03_today]: 日累计驾驶超8小时（扶轮制）触发告警" .
+
+:D-04 a :Event ;
+    rdfs:label "连续驾驶超7天"@zh ;
+    rdfs:comment "连续驾驶超7天"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_WORKOVERPERIOND_MI" ;
+    :triggerKeywords "连续驾驶超7天,连续工作超7天,七天没休息" ;
+    :keyMetrics """{"GH":"工号","LXTS":"连续工作天数","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d04_today": "SELECT GH, LXTS, GJSJ FROM PROD_DW.TF_AQTS_WORKOVERPERIOND_MI WHERE RQ=CURDATE() ORDER BY LXTS DESC",
+  "d04_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_WORKOVERPERIOND_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-04→d04_today]: 连续7天以上未休息必须强制安排休假" .
+
+:D-05 a :Event ;
+    rdfs:label "休息不足"@zh ;
+    rdfs:comment "休息不足/休息时间不够"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_RESTLACK_MI" ;
+    :triggerKeywords "休息不足,休息时间不够,未充分休息,班间休息" ;
+    :keyMetrics """{"GH":"工号","XXSJ":"休息时间","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d05_today": "SELECT GH, XXSJ, GJSJ FROM PROD_DW.TF_AQTS_RESTLACK_MI WHERE RQ=CURDATE() ORDER BY XXSJ ASC",
+  "d05_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_RESTLACK_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-05→d05_today]: 班间休息少于8小时触发告警" .
+
+:D-06 a :Event ;
+    rdfs:label "准驾不符资质告警"@zh ;
+    rdfs:comment "准驾不符/资质告警"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_JSZZALARM_MI" ;
+    :triggerKeywords "准驾不符,资质告警,证件不符,驾驶资质,驾照类型" ;
+    :keyMetrics """{"GH":"工号","ZJLX":"证件类型","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d06_today": "SELECT GH, ZJLX, GJSJ FROM PROD_DW.TF_AQTS_JSZZALARM_MI WHERE RQ=CURDATE()",
+  "d06_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_JSZZALARM_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-06→d06_today]: 驾驶员驾照类型须与所驾车辆匹配" .
+
+:D-07 a :Event ;
+    rdfs:label "硬翻班"@zh ;
+    rdfs:comment "硬翻班"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_YFBALARM_MI" ;
+    :triggerKeywords "硬翻班,强制翻班,违规翻班,翻班告警" ;
+    :keyMetrics """{"GH":"工号","FBSJ":"翻班时间","GJSJ":"告警时间"}""" ;
+    :queryTemplate """{
+  "d07_today": "SELECT GH, FBSJ, GJSJ FROM PROD_DW.TF_AQTS_YFBALARM_MI WHERE RQ=CURDATE()",
+  "d07_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_YFBALARM_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-07→d07_today]: 硬翻班=未经审批强制更换班次" .
+
+:D-08 a :Event ;
+    rdfs:label "临时调度"@zh ;
+    rdfs:comment "临时调度"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_TEPORSCHEDUAL_MI" ;
+    :triggerKeywords "临时调度,临调,紧急调度,计划外调度" ;
+    :keyMetrics """{"GH":"工号","LTSJ":"临调时间","LTYY":"临调原因"}""" ;
+    :queryTemplate """{
+  "d08_today": "SELECT GH, LTSJ, LTYY FROM PROD_DW.TF_AQTS_TEPORSCHEDUAL_MI WHERE RQ=CURDATE()",
+  "d08_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_TEPORSCHEDUAL_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-08→d08_today]: 临时调度记录异常调度情况" .
+
+:D-09 a :Event ;
+    rdfs:label "换线新司机换线"@zh ;
+    rdfs:comment "换线/新司机换线"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_LINECHANGE_MI" ;
+    :triggerKeywords "换线,新司机换线,线路变更,调换线路" ;
+    :keyMetrics """{"GH":"工号","YUANXL":"原线路","XINXL":"新线路","HXSJ":"换线时间"}""" ;
+    :queryTemplate """{
+  "d09_today": "SELECT GH, YUANXL, XINXL, HXSJ FROM PROD_DW.TF_AQTS_LINECHANGE_MI WHERE RQ=CURDATE()",
+  "d09_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_LINECHANGE_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-09→d09_today]: 新司机换线需加强监控" .
+
+:D-10 a :Event ;
+    rdfs:label "班型更换"@zh ;
+    rdfs:comment "班型更换"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_BCBSCHANGE_MI" ;
+    :triggerKeywords "班型更换,班型变更,换班型" ;
+    :keyMetrics """{"GH":"工号","YUANBT":"原班型","XINBT":"新班型","BGSJ":"变更时间"}""" ;
+    :queryTemplate """{
+  "d10_today": "SELECT GH, YUANBT, XINBT, BGSJ FROM PROD_DW.TF_AQTS_BCBSCHANGE_MI WHERE RQ=CURDATE()",
+  "d10_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_BCBSCHANGE_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-10→d10_today]: 班型更换记录排班变动情况" .
+
+:D-11 a :Event ;
+    rdfs:label "没开本班"@zh ;
+    rdfs:comment "没开本班"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_BCDEVIATE_MI" ;
+    :triggerKeywords "没开本班,班次偏离,未按班次,错班" ;
+    :keyMetrics """{"GH":"工号","YBBC":"应开班次","SJBC":"实际班次"}""" ;
+    :queryTemplate """{
+  "d11_today": "SELECT GH, YBBC, SJBC FROM PROD_DW.TF_AQTS_BCDEVIATE_MI WHERE RQ=CURDATE()",
+  "d11_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_BCDEVIATE_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-11→d11_today]: 未按计划班次出行记录" .
+
+:D-12 a :Event ;
+    rdfs:label "没开本车"@zh ;
+    rdfs:comment "没开本车"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_CLDEVIATE_MI" ;
+    :triggerKeywords "没开本车,车辆偏离,未按指定车辆,错车" ;
+    :keyMetrics """{"GH":"工号","YBCL":"应开车辆","SJCL":"实际车辆"}""" ;
+    :queryTemplate """{
+  "d12_today": "SELECT GH, YBCL, SJCL FROM PROD_DW.TF_AQTS_CLDEVIATE_MI WHERE RQ=CURDATE()",
+  "d12_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_CLDEVIATE_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-12→d12_today]: 未按指定车辆出行记录" .
+
+:D-13 a :Event ;
+    rdfs:label "高血压告警"@zh ;
+    rdfs:comment "高血压"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_BLOODPRESSALARM_MI" ;
+    :triggerKeywords "高血压,血压告警,血压异常,血压超标" ;
+    :keyMetrics """{"GH":"工号","SY":"收缩压","ZY":"舒张压","JCSJ":"检测时间"}""" ;
+    :queryTemplate """{
+  "d13_today": "SELECT GH, SY, ZY, JCSJ FROM PROD_DW.TF_AQTS_BLOODPRESSALARM_MI WHERE RQ=CURDATE() ORDER BY SY DESC",
+  "d13_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_BLOODPRESSALARM_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-13→d13_today]: 血压超标驾驶员禁止出车" .
+
+:D-14 a :Event ;
+    rdfs:label "重大阳性"@zh ;
+    rdfs:comment "重大阳性"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_AQTS_IMPORTANT_POSITIVE_MI" ;
+    :triggerKeywords "重大阳性,阳性,健康异常,重大健康问题" ;
+    :keyMetrics """{"GH":"工号","ZZLX":"症状类型","JCSJ":"检测时间"}""" ;
+    :queryTemplate """{
+  "d14_today": "SELECT GH, ZZLX, JCSJ FROM PROD_DW.TF_AQTS_IMPORTANT_POSITIVE_MI WHERE RQ=CURDATE()",
+  "d14_count": "SELECT COUNT(*) AS CNT FROM PROD_DW.TF_AQTS_IMPORTANT_POSITIVE_MI WHERE RQ=CURDATE()"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-14→d14_today]: 重大阳性驾驶员需立即隔离，禁止出车" .
+
+:D-15 a :Event ;
+    rdfs:label "酒测酒精检测"@zh ;
+    rdfs:comment "酒测/酒精检测"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TA_CZFZSB_RYKQJL_DAY_MI" ;
+    :triggerKeywords "酒测,酒精检测,酒精,醉驾,饮酒驾车" ;
+    :keyMetrics """{"GH":"工号","JCJG":"检测结果","JCSJ":"检测时间","JJZL":"酒精浓度"}""" ;
+    :queryTemplate """{
+  "d15_today": "SELECT GH, JCJG, JCSJ, JJZL FROM PROD_DW.TA_CZFZSB_RYKQJL_DAY_MI WHERE RQ=CURDATE() ORDER BY JCSJ DESC",
+  "d15_abnormal": "SELECT GH, JJZL, JCSJ FROM PROD_DW.TA_CZFZSB_RYKQJL_DAY_MI WHERE RQ=CURDATE() AND JCJG='不合格' ORDER BY JJZL DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-15→d15_abnormal]: 酒精超标（≥20mg/100ml）驾驶员禁止出车" .
+
+:D-16 a :Report ;
+    rdfs:label "驾驶员画像季度评价"@zh ;
+    rdfs:comment "驾驶员画像/季度评价/模范驾驶员"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TA_AQJH_PJQK_QUARTER_DI" ;
+    :triggerKeywords "驾驶员画像,季度评价,模范驾驶员,驾驶员评分,驾驶员绩效" ;
+    :keyMetrics """{"GH":"工号","PJDF":"评价得分","PJJD":"评价季度","MFJSY":"是否模范"}""" ;
+    :queryTemplate """{
+  "d16_current_quarter": "SELECT GH, PJDF, PJJD, MFJSY FROM PROD_DW.TA_AQJH_PJQK_QUARTER_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 90 DAY) ORDER BY PJDF DESC",
+  "d16_top_drivers": "SELECT GH, PJDF FROM PROD_DW.TA_AQJH_PJQK_QUARTER_DI WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 90 DAY) ORDER BY PJDF DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-16→d16_current_quarter]: 季度评价覆盖安全/服务/效率三维度" .
+
+:D-17 a :Entity ;
+    rdfs:label "驾驶员信息驾龄"@zh ;
+    rdfs:comment "驾驶员信息/驾龄"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TA_AS_BJ_DRIVER_INFO_DA" ;
+    :triggerKeywords "驾驶员信息,驾龄,司机档案,驾驶员档案,从业年限" ;
+    :keyMetrics """{"GH":"工号","XM":"姓名","JL":"驾龄","GZRQ":"工作日期","FGS":"分公司"}""" ;
+    :queryTemplate """{
+  "d17_by_gh": "SELECT GH, XM, JL, GZRQ, FGS FROM PROD_DW.TA_AS_BJ_DRIVER_INFO_DA WHERE GH='{gh}'",
+  "d17_by_org": "SELECT GH, XM, JL FROM PROD_DW.TA_AS_BJ_DRIVER_INFO_DA WHERE FGS='{org}' ORDER BY JL DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-17→d17_by_gh]: 驾驶员信息为基础档案，驾龄关联风险评估" .
+
+:D-18 a :Entity ;
+    rdfs:label "体检记录"@zh ;
+    rdfs:comment "体检记录/体检日期"@zh ;
+    :domain "驾驶员管理" ;
+    :primaryTable "PROD_DW.TF_PS_RL_TJRYXX_DA" ;
+    :triggerKeywords "体检记录,体检,体检日期,健康检查,年度体检" ;
+    :keyMetrics """{"GH":"工号","TJRQ":"体检日期","TJJG":"体检结果","XYRQ":"下次预约"}""" ;
+    :queryTemplate """{
+  "d18_by_gh": "SELECT GH, TJRQ, TJJG, XYRQ FROM PROD_DW.TF_PS_RL_TJRYXX_DA WHERE GH='{gh}' ORDER BY TJRQ DESC",
+  "d18_overdue": "SELECT GH, TJRQ FROM PROD_DW.TF_PS_RL_TJRYXX_DA WHERE TJRQ<DATE_SUB(CURDATE(), INTERVAL 365 DAY) ORDER BY TJRQ ASC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[D-18→d18_overdue]: 超365天未体检驾驶员需预警" .
+
+# =============================================================================
+# Domain SC：稽查客诉
+# =============================================================================
+
+:SC-01 a :Event ;
+    rdfs:label "综合稽查"@zh ;
+    rdfs:comment "稽查/综合稽查"@zh ;
+    :domain "稽查客诉" ;
+    :primaryTable "PROD_DW.TF_PS_ZHJC_JCWTGDCLJL_DA" ;
+    :triggerKeywords "稽查,综合稽查,检查,稽查记录,违规稽查,安全检查" ;
+    :keyMetrics """{"JCLX":"稽查类型","WTMS":"问题描述","CLJG":"处理结果","JCSJ":"稽查时间"}""" ;
+    :queryTemplate """{
+  "sc01_recent": "SELECT JCLX, WTMS, CLJG, JCSJ FROM PROD_DW.TF_PS_ZHJC_JCWTGDCLJL_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) ORDER BY JCSJ DESC",
+  "sc01_by_type": "SELECT JCLX, COUNT(*) AS CNT FROM PROD_DW.TF_PS_ZHJC_JCWTGDCLJL_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY JCLX ORDER BY CNT DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[SC-01→sc01_recent]: 综合稽查问题需及时处理和反馈" .
+
+:SC-02 a :Event ;
+    rdfs:label "客诉市民意见投诉"@zh ;
+    rdfs:comment "客诉/市民意见/投诉"@zh ;
+    :domain "稽查客诉" ;
+    :primaryTable "PROD_DW.TA_PS_SMYJ_GDMX_DA" ;
+    :triggerKeywords "客诉,投诉,市民意见,乘客投诉,服务投诉,客户意见" ;
+    :keyMetrics """{"TSLX":"投诉类型","TSMS":"投诉描述","CLJG":"处理结果","TSSJ":"投诉时间"}""" ;
+    :queryTemplate """{
+  "sc02_recent": "SELECT TSLX, TSMS, CLJG, TSSJ FROM PROD_DW.TA_PS_SMYJ_GDMX_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) ORDER BY TSSJ DESC",
+  "sc02_by_type": "SELECT TSLX, COUNT(*) AS CNT FROM PROD_DW.TA_PS_SMYJ_GDMX_DA WHERE RQ>=DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY TSLX ORDER BY CNT DESC",
+  "sc02_today": "SELECT TSLX, TSMS, TSSJ FROM PROD_DW.TA_PS_SMYJ_GDMX_DA WHERE RQ=CURDATE() ORDER BY TSSJ DESC"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[SC-02→sc02_recent]: 客诉须在规定时限内回复处理" .
+
+# =============================================================================
+# Domain P：乘客客流
+# =============================================================================
+
+:P-01 a :Report ;
+    rdfs:label "时段客流趟次客流"@zh ;
+    rdfs:comment "时段客流/趟次客流"@zh ;
+    :domain "乘客客流" ;
+    :primaryTable "PROD_DW.TA_YYDD_DD_KLFX_TC_DAY_MI" ;
+    :triggerKeywords "时段客流,趟次客流,每趟客流,分时客流,班次客流" ;
+    :keyMetrics """{"TCSJ":"趟次时间","SCKYL":"上车客运量","XCKYL":"下车客运量","SD":"时段"}""" ;
+    :queryTemplate """{
+  "p01_daily": "SELECT SD, SUM(SCKYL) AS SCKYL FROM PROD_DW.TA_YYDD_DD_KLFX_TC_DAY_MI WHERE RQ=CURDATE() GROUP BY SD ORDER BY SD",
+  "p01_by_line": "SELECT TCSJ, SCKYL, XCKYL FROM PROD_DW.TA_YYDD_DD_KLFX_TC_DAY_MI WHERE RQ='{date}' AND XLH='{line}' ORDER BY TCSJ",
+  "p01_peak": "SELECT SD, SUM(SCKYL) AS SCKYL FROM PROD_DW.TA_YYDD_DD_KLFX_TC_DAY_MI WHERE RQ=CURDATE() GROUP BY SD ORDER BY SCKYL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[P-01→p01_daily]: 按时段汇总客流用于高峰分析" .
+
+:P-02 a :Report ;
+    rdfs:label "老年客流老年乘客"@zh ;
+    rdfs:comment "老年客流/老年乘客"@zh ;
+    :domain "乘客客流" ;
+    :primaryTable "PROD_STAT.TA_YYDD_ONBOARD_BUS_MI" ;
+    :triggerKeywords "老年客流,老年乘客,老人,老年人,敬老卡,老年优惠" ;
+    :keyMetrics """{"LNKYL":"老年客运量","LNBL":"老年占比","XLH":"线路"}""" ;
+    :queryTemplate """{
+  "p02_daily": "SELECT XLH, SUM(LNKYL) AS LNKYL, AVG(LNBL) AS LNBL FROM PROD_STAT.TA_YYDD_ONBOARD_BUS_MI WHERE RQ=CURDATE() GROUP BY XLH",
+  "p02_ranking": "SELECT XLH, SUM(LNKYL) AS LNKYL FROM PROD_STAT.TA_YYDD_ONBOARD_BUS_MI WHERE RQ=CURDATE() GROUP BY XLH ORDER BY LNKYL DESC LIMIT {rank_n}"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[P-02→p02_daily]: 老年客流占比高线路需关注无障碍服务" .
+
+:P-03 a :Report ;
+    rdfs:label "当前老年乘客"@zh ;
+    rdfs:comment "当前老年乘客"@zh ;
+    :domain "乘客客流" ;
+    :primaryTable "PROD_STAT.TA_YYDD_ONBOARD_BUS_LATEST_MI" ;
+    :triggerKeywords "当前老年乘客,实时老年,在车老年人,当前老年" ;
+    :keyMetrics """{"CLZBH":"车辆","LNCS":"老年人数","SCSJ":"上传时间"}""" ;
+    :queryTemplate """{
+  "p03_realtime": "SELECT CLZBH, LNCS, SCSJ FROM PROD_STAT.TA_YYDD_ONBOARD_BUS_LATEST_MI ORDER BY SCSJ DESC LIMIT 50",
+  "p03_by_vehicle": "SELECT CLZBH, LNCS, SCSJ FROM PROD_STAT.TA_YYDD_ONBOARD_BUS_LATEST_MI WHERE CLZBH='{zbh}' ORDER BY SCSJ DESC LIMIT 1"
+}""" ;
+    :partitionField "RQ" ;
+    :businessRule "[P-03→p03_realtime]: 实时老年乘客数用于安全辅助决策" .
